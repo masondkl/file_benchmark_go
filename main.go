@@ -18,15 +18,9 @@ var MODES = []string{
 	"direct_manual_fsync", "direct_manual_dsync",
 }
 
-func RunOperations(fileIndex int, operations int, data []byte, file *os.File, mode string, alloc bool) {
+func Time(fileIndex int, operations int, mode string, alloc bool, operation string, dataSize int, block func()) {
 	start := time.Now().UnixNano()
-	for i := 0; i < operations; i++ {
-		_, err := file.Write(data)
-		if err != nil {
-			fmt.Println("Error writing file: ", err)
-			return
-		}
-	}
+	block()
 	end := time.Now().UnixNano()
 	sec := float64(end-start) / float64(1000000000)
 	opsSec := float64(operations) / sec
@@ -34,58 +28,105 @@ func RunOperations(fileIndex int, operations int, data []byte, file *os.File, mo
 	if alloc {
 		allocStr = "alloc"
 	}
-	fmt.Printf("File(%v) Completed %v %v %v operations with data size %v bytes: (%v ops/sec over %v secs)\n", fileIndex, operations, allocStr, mode, len(data), opsSec, sec)
+	fmt.Printf(
+		"File(%v) Completed %v %v %v %v operations with data size %v bytes: (%v ops/sec over %v secs)\n",
+		fileIndex, operations, allocStr, mode, operation, dataSize, opsSec, sec,
+	)
 }
 
-func RunDsyncOperations(fileIndex int, operations int, data []byte, file *os.File, mode string, alloc bool) {
-	start := time.Now().UnixNano()
-	for i := 0; i < operations; i++ {
-		_, err := file.Write(data)
-		if err != nil {
-			fmt.Println("Error writing file: ", err)
-			return
+func RunReadOperations(fileIndex int, operations int, mode string, alloc bool, operation string, data []byte, file *os.File) {
+	Time(fileIndex, operations, mode, alloc, operation, len(data), func() {
+		for i := 0; i < operations; i++ {
+			n, err := file.Read(data)
+			if n != len(data) || err != nil {
+				fmt.Println("Error reading file: ", err)
+				return
+			}
 		}
-		err = syscall.Fdatasync(int(file.Fd()))
-		if err != nil {
-			fmt.Println("Error dsyncing file: ", err)
-			return
-		}
-	}
-	end := time.Now().UnixNano()
-	sec := float64(end-start) / float64(1000000000)
-	opsSec := float64(operations) / sec
-	allocStr := "prealloc"
-	if alloc {
-		allocStr = "alloc"
-	}
-	fmt.Printf("File(%v) Completed %v %v %v operations with data size %v bytes: (%v ops/sec over %v secs)\n", fileIndex, operations, allocStr, mode, len(data), opsSec, sec)
+	})
 }
 
-func RunFsyncOperations(fileIndex int, operations int, data []byte, file *os.File, mode string, alloc bool) {
-	start := time.Now().UnixNano()
-	for i := 0; i < operations; i++ {
-		_, err := file.Write(data)
-		if err != nil {
-			fmt.Println("Error writing file: ", err)
-			return
+func RunDsyncReadOperations(fileIndex int, operations int, mode string, alloc bool, operation string, data []byte, file *os.File) {
+	Time(fileIndex, operations, mode, alloc, operation, len(data), func() {
+		for i := 0; i < operations; i++ {
+			err := syscall.Fdatasync(int(file.Fd()))
+			if err != nil {
+				fmt.Println("Error dsyncing file: ", err)
+				return
+			}
+			n, err := file.Read(data)
+			if n != len(data) || err != nil {
+				fmt.Println("Error reading file: ", err)
+				return
+			}
 		}
-		err = syscall.Fsync(int(file.Fd()))
-		if err != nil {
-			fmt.Println("Error fsyncing file: ", err)
-			return
-		}
-	}
-	end := time.Now().UnixNano()
-	sec := float64(end-start) / float64(1000000000)
-	opsSec := float64(operations) / sec
-	allocStr := "prealloc"
-	if alloc {
-		allocStr = "alloc"
-	}
-	fmt.Printf("File(%v) Completed %v %v %v operations with data size %v bytes: (%v ops/sec over %v secs)\n", fileIndex, operations, allocStr, mode, len(data), opsSec, sec)
+	})
 }
 
-func Run(operations int, dataSize int, files int, mode string, alloc bool) {
+func RunFsyncReadOperations(fileIndex int, operations int, mode string, alloc bool, operation string, data []byte, file *os.File) {
+	Time(fileIndex, operations, mode, alloc, operation, len(data), func() {
+		for i := 0; i < operations; i++ {
+			err := syscall.Fsync(int(file.Fd()))
+			if err != nil {
+				fmt.Println("Error fsyncing file: ", err)
+				return
+			}
+			n, err := file.Read(data)
+			if n != len(data) || err != nil {
+				fmt.Println("Error reading file: ", err)
+				return
+			}
+		}
+	})
+}
+
+func RunWriteOperations(fileIndex int, operations int, mode string, alloc bool, operation string, data []byte, file *os.File) {
+	Time(fileIndex, operations, mode, alloc, operation, len(data), func() {
+		for i := 0; i < operations; i++ {
+			n, err := file.Write(data)
+			if n != len(data) || err != nil {
+				fmt.Println("Error writing file: ", err)
+				return
+			}
+		}
+	})
+}
+
+func RunDsyncWriteOperations(fileIndex int, operations int, mode string, alloc bool, operation string, data []byte, file *os.File) {
+	Time(fileIndex, operations, mode, alloc, operation, len(data), func() {
+		for i := 0; i < operations; i++ {
+			n, err := file.Write(data)
+			if n != len(data) || err != nil {
+				fmt.Println("Error writing file: ", err)
+				return
+			}
+			err = syscall.Fdatasync(int(file.Fd()))
+			if err != nil {
+				fmt.Println("Error dsyncing file: ", err)
+				return
+			}
+		}
+	})
+}
+
+func RunFsyncWriteOperations(fileIndex int, operations int, mode string, alloc bool, operation string, data []byte, file *os.File) {
+	Time(fileIndex, operations, mode, alloc, operation, len(data), func() {
+		for i := 0; i < operations; i++ {
+			n, err := file.Write(data)
+			if n != len(data) || err != nil {
+				fmt.Println("Error writing file: ", err)
+				return
+			}
+			err = syscall.Fsync(int(file.Fd()))
+			if err != nil {
+				fmt.Println("Error fsyncing file: ", err)
+				return
+			}
+		}
+	})
+}
+
+func Run(operations int, dataSize int, files int, mode string, operation string, alloc bool) {
 	flags := 0
 	if mode == "sync" {
 		flags |= syscall.O_SYNC
@@ -104,7 +145,6 @@ func Run(operations int, dataSize int, files int, mode string, alloc bool) {
 	} else if mode == "direct_manual_dsync" {
 		flags |= syscall.O_DIRECT
 	}
-	//fmt.Printf("Starting run of %v %v operations with data size %v bytes\n", operations, mode, dataSize)
 	group := sync.WaitGroup{}
 	group.Add(files)
 	for i := 0; i < files; i++ {
@@ -124,30 +164,44 @@ func Run(operations int, dataSize int, files int, mode string, alloc bool) {
 				fmt.Println("Error opening file: ", err)
 				return
 			}
-			data := make([]byte, dataSize)
-			if !alloc {
-				for i := 0; i < operations; i++ {
-					_, err := file.Write(data)
-					if err != nil {
-						fmt.Println("Error pre-allocating file: ", err)
-						return
-					}
-				}
-				if err != nil {
-					fmt.Println("Error preallocating file space:", err)
+			if !alloc || operation == "read" {
+				data := make([]byte, dataSize*operations)
+				n, err := file.Write(data)
+				if n != len(data) || err != nil {
+					fmt.Println("Error pre-allocating file: ", err)
 					return
 				}
-				_, err := file.Seek(0, io.SeekStart)
+				_, err = file.Seek(0, io.SeekStart)
 				if err != nil {
+					fmt.Println("Error seeking file: ", err)
+					return
+				}
+				err = syscall.Fsync(int(file.Fd()))
+				if err != nil {
+					fmt.Println("Error fsyncing file: ", err)
 					return
 				}
 			}
+
+			data := make([]byte, dataSize)
 			if mode == "manual_fsync" || mode == "direct_manual_fsync" {
-				RunFsyncOperations(fileIndex, operations, data, file, mode, alloc)
+				if operation == "write" {
+					RunFsyncWriteOperations(fileIndex, operations, mode, alloc, operation, data, file)
+				} else {
+					RunFsyncReadOperations(fileIndex, operations, mode, alloc, operation, data, file)
+				}
 			} else if mode == "manual_dsync" || mode == "direct_manual_dsync" {
-				RunDsyncOperations(fileIndex, operations, data, file, mode, alloc)
+				if operation == "write" {
+					RunDsyncWriteOperations(fileIndex, operations, mode, alloc, operation, data, file)
+				} else {
+					RunDsyncReadOperations(fileIndex, operations, mode, alloc, operation, data, file)
+				}
 			} else {
-				RunOperations(fileIndex, operations, data, file, mode, alloc)
+				if operation == "write" {
+					RunWriteOperations(fileIndex, operations, mode, alloc, operation, data, file)
+				} else {
+					RunReadOperations(fileIndex, operations, mode, alloc, operation, data, file)
+				}
 			}
 			err = file.Close()
 			if err != nil {
@@ -160,38 +214,65 @@ func Run(operations int, dataSize int, files int, mode string, alloc bool) {
 	group.Wait()
 }
 
+func PrintArguments() {
+	fmt.Println("Expected arguments: (operations int) (data_size int) (files int) (mode string) (operation string) (alloc bool)")
+	fmt.Println("Modes: all, ", strings.Join(MODES, ", "))
+	fmt.Println("Operations: read, write")
+}
+
 func main() {
-	if len(os.Args) != 6 {
-		fmt.Println("Expected arguments: (operations int) (data_size int) (files int) (mode str) (alloc bool)")
+	if len(os.Args) != 7 {
+		fmt.Println("1")
+		PrintArguments()
 		return
 	}
 	operations, err := strconv.Atoi(os.Args[1])
 	if err != nil {
-		fmt.Println("Expected arguments: (operations int) (data_size int) (files int) (mode str) (alloc bool)")
+		fmt.Println("2")
+		PrintArguments()
 		return
 	}
 	dataSize, err := strconv.Atoi(os.Args[2])
 	if err != nil {
-		fmt.Println("Expected arguments: (operations int) (data_size int) (files int) (mode str) (alloc bool)")
+		fmt.Println("3")
+		PrintArguments()
 		return
 	}
 	files, err := strconv.Atoi(os.Args[3])
 	if err != nil {
-		fmt.Println("Expected arguments: (operations int) (data_size int) (files int) (mode str) (alloc bool)")
+		fmt.Println("4")
+		PrintArguments()
 		return
 	}
 	mode := strings.ToLower(os.Args[4])
-	alloc, err := strconv.ParseBool(os.Args[5])
-	if err != nil {
-		fmt.Println("Expected arguments: (operations int) (data_size int) (files int) (mode str) (alloc bool)")
+	success := false
+	for i := 0; i < len(MODES); i++ {
+		if MODES[i] == mode {
+			success = true
+		}
+	}
+	if mode != "all" && !success {
+		fmt.Println("5")
+		PrintArguments()
 		return
 	}
-
+	operation := strings.ToLower(os.Args[5])
+	if operation != "write" && operation != "read" {
+		fmt.Println("6")
+		PrintArguments()
+		return
+	}
+	alloc, err := strconv.ParseBool(os.Args[6])
+	if err != nil {
+		fmt.Println("7")
+		PrintArguments()
+		return
+	}
 	if mode == "all" {
 		for i := 0; i < len(MODES); i++ {
-			Run(operations, dataSize, files, MODES[i], alloc)
+			Run(operations, dataSize, files, MODES[i], operation, alloc)
 		}
 	} else {
-		Run(operations, dataSize, files, mode, alloc)
+		Run(operations, dataSize, files, mode, operation, alloc)
 	}
 }
