@@ -147,6 +147,8 @@ func Run(operations int, dataSize int, files int, mode string, operation string,
 	}
 	group := sync.WaitGroup{}
 	group.Add(files)
+
+	start := time.Now().UnixNano()
 	for i := 0; i < files; i++ {
 		fileIndex := i
 		go func() {
@@ -212,6 +214,17 @@ func Run(operations int, dataSize int, files int, mode string, operation string,
 		}()
 	}
 	group.Wait()
+	end := time.Now().UnixNano()
+	sec := float64(end-start) / float64(1000000000)
+	opsSec := float64(operations*files) / sec
+	allocStr := "prealloc"
+	if alloc {
+		allocStr = "alloc"
+	}
+	fmt.Printf(
+		"Completed %v %v %v %v operations with data size %v bytes: (%v ops/sec over %v secs)\n",
+		operations*files, allocStr, mode, operation, dataSize, opsSec, sec,
+	)
 }
 
 func PrintArguments() {
@@ -224,6 +237,7 @@ func main() {
 	if len(os.Args) != 7 {
 		fmt.Println("1")
 		PrintArguments()
+
 		return
 	}
 	operations, err := strconv.Atoi(os.Args[1])
